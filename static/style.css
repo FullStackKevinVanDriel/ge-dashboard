@@ -638,6 +638,16 @@ main {
     padding: 0.5rem 0;
 }
 
+.controls-warning {
+    color: var(--accent-orange);
+    font-size: 0.85rem;
+    padding: 0.75rem;
+    background: rgba(243, 156, 18, 0.1);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 6px;
+    margin: 0;
+}
+
 /* Command states */
 .appliance-card.sending {
     opacity: 0.7;

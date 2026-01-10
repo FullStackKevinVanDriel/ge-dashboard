@@ -223,32 +223,41 @@
                             </div>
                         `;
                     } else if (ctrl.can_toggle) {
-                        // Toggle switch
+                        // On/Off buttons (same style as other controls)
                         const isOn = ctrl.current.toLowerCase() === 'true' ||
                                      ctrl.current.toLowerCase() === 'enabled' ||
                                      ctrl.current === 'Enabled';
                         controlItems += `
                             <div class="control-row">
                                 <span class="control-name">${name}</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" ${isOn ? 'checked' : ''}
-                                        onchange="setControl('${mac}', '${erd}', this.checked ? 'enabled' : 'disabled')">
-                                    <span class="toggle-slider"></span>
-                                </label>
+                                <div class="control-buttons">
+                                    <button class="control-btn ${!isOn ? 'active' : ''}"
+                                        onclick="setControl('${mac}', '${erd}', 'disabled')">Off</button>
+                                    <button class="control-btn ${isOn ? 'active' : ''}"
+                                        onclick="setControl('${mac}', '${erd}', 'enabled')">On</button>
+                                </div>
                             </div>
                         `;
                     }
                 }
                 if (controlItems) {
-                    const remoteNote = !data.remote_enabled ?
-                        '<p class="controls-note">Note: Remote Start is disabled on this appliance</p>' : '';
-                    controlsHtml = `
-                        <div class="controls-section">
-                            <h3>Controls</h3>
-                            ${remoteNote}
-                            <div class="controls-grid">${controlItems}</div>
-                        </div>
-                    `;
+                    if (!data.remote_enabled) {
+                        // Remote disabled - show warning and disable buttons
+                        controlsHtml = `
+                            <div class="controls-section controls-disabled">
+                                <h3>Controls (Disabled)</h3>
+                                <p class="controls-warning">Remote control is OFF on this appliance.
+                                   Enable it in the SmartHQ app to use these controls.</p>
+                            </div>
+                        `;
+                    } else {
+                        controlsHtml = `
+                            <div class="controls-section">
+                                <h3>Controls</h3>
+                                <div class="controls-grid">${controlItems}</div>
+                            </div>
+                        `;
+                    }
                 }
             }
 
