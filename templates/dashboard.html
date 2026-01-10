@@ -190,8 +190,9 @@
             }
 
             // Controls section (settable options) - now with interactive buttons
+            // Note: remote_enabled may only affect "Remote Start", not setting changes
             let controlsHtml = '';
-            if (Object.keys(controls).length > 0 && data.remote_enabled !== false) {
+            if (Object.keys(controls).length > 0) {
                 let controlItems = '';
 
                 // Map control keys to ERD names
@@ -239,21 +240,16 @@
                     }
                 }
                 if (controlItems) {
+                    const remoteNote = !data.remote_enabled ?
+                        '<p class="controls-note">Note: Remote Start is disabled on this appliance</p>' : '';
                     controlsHtml = `
                         <div class="controls-section">
                             <h3>Controls</h3>
+                            ${remoteNote}
                             <div class="controls-grid">${controlItems}</div>
                         </div>
                     `;
                 }
-            } else if (Object.keys(controls).length > 0) {
-                // Remote not enabled - show read-only
-                controlsHtml = `
-                    <div class="controls-section controls-disabled">
-                        <h3>Controls (Remote Disabled)</h3>
-                        <p class="controls-note">Enable Remote on the appliance to control from here</p>
-                    </div>
-                `;
             }
 
             // Properties to exclude from the details section
