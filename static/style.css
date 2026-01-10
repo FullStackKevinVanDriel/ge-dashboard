@@ -465,6 +465,84 @@ main {
     background: rgba(243, 156, 18, 0.15);
 }
 
+/* Header Badges */
+.header-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.remote-badge {
+    background: rgba(77, 168, 218, 0.2);
+    color: var(--accent-blue);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Stats Metric */
+.metric.stat {
+    background: rgba(155, 89, 182, 0.15);
+    border: 1px solid rgba(155, 89, 182, 0.3);
+}
+
+.metric.stat .metric-value {
+    color: var(--accent-purple);
+}
+
+/* Controls Section */
+.controls-section {
+    padding: 1rem 1.5rem;
+    background: rgba(77, 168, 218, 0.05);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.controls-section h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-blue);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.controls-grid {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.control-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.control-name {
+    color: var(--text-secondary);
+}
+
+.control-current {
+    color: var(--accent-green);
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    background: rgba(46, 204, 113, 0.15);
+    border-radius: 4px;
+}
+
+.control-options {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
 /* Card updating animation */
 .appliance-card.updating {
     box-shadow: 0 0 20px rgba(77, 168, 218, 0.4);

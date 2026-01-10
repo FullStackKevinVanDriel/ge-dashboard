@@ -58,6 +58,12 @@ WASHER_ERDS = [
     ErdCode.LAUNDRY_WASHER_TANK_SELECTED,
     ErdCode.LAUNDRY_WASHER_SMART_DISPENSE,
     ErdCode.LAUNDRY_WASHER_SMART_DISPENSE_TANK_STATUS,
+    ErdCode.LAUNDRY_WASHER_SMART_DISPENSE_ADJUSTABILITY_OPTION,
+    ErdCode.LAUNDRY_WASHER_LINK_DATA,
+    ErdCode.LAUNDRY_WASHER_DOOR_LOCK,
+    ErdCode.LAUNDRY_WASHER_POWERSTEAM,
+    ErdCode.LAUNDRY_WASHER_PREWASH,
+    ErdCode.LAUNDRY_WASHER_TIMESAVER,
 ]
 
 DRYER_ERDS = [
@@ -68,13 +74,103 @@ DRYER_ERDS = [
     ErdCode.LAUNDRY_DRYER_SHEET_INVENTORY,
     ErdCode.LAUNDRY_DRYER_WASHERLINK_STATUS,
     ErdCode.LAUNDRY_DRYER_DAMP_ALERT_STATUS,
+    # Allowables (what can be controlled)
+    ErdCode.LAUNDRY_DRYER_TEMPERATURE_OPTION_ALLOWABLES,
+    ErdCode.LAUNDRY_DRYER_DRYNESS_OPTION_ALLOWABLES,
+    ErdCode.LAUNDRY_DRYER_ECODRY_OPTION_ALLOWABLES,
+    ErdCode.LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_ALLOWABLES,
+    ErdCode.LAUNDRY_DRYER_DAMP_ALERT_OPTION_ALLOWABLES,
+    ErdCode.LAUNDRY_DRYER_SHEET_USAGE_CONFIGURATION,
+    ErdCode.LAUNDRY_DRYER_WASHERLINK_CONTROL,
+    ErdCode.LAUNDRY_DRYER_RECOMMENDED_WASHERLINK_CYCLE,
+    ErdCode.LAUNDRY_DRYER_BLOCKED_VENT_FAULT,
 ]
+
+
+def parse_complex_value(value, erd_name):
+    """Parse complex ERD values into structured data"""
+    value_str = str(value)
+
+    # Smart Dispense - extract loads_left and signal (tank percentage)
+    if 'ErdSmartDispense' in value_str:
+        import re
+        loads_match = re.search(r'loads_left=(\d+)', value_str)
+        signal_match = re.search(r'signal=(\d+)', value_str)
+        loads = loads_match.group(1) if loads_match else '?'
+        signal = signal_match.group(1) if signal_match else '?'
+        return {"display": f"{loads} loads left ({signal}%)", "loads_left": loads, "tank_percent": signal}
+
+    # EcoDry Selection - just show enabled/disabled
+    if 'ErdEcoDryOptionSelection' in value_str:
+        return {"display": "Enabled" if 'ENABLED' in value_str else "Disabled"}
+
+    # Sheet Usage Configuration - format nicely
+    if 'ErdSheetUsageConfiguration' in value_str:
+        import re
+        s = re.search(r'small_load_size=(\d+)', value_str)
+        m = re.search(r'medium_load_size=(\d+)', value_str)
+        l = re.search(r'large_load_size=(\d+)', value_str)
+        xl = re.search(r'extra_large_load_size=(\d+)', value_str)
+        return {
+            "display": f"S:{s.group(1) if s else '?'} M:{m.group(1) if m else '?'} L:{l.group(1) if l else '?'} XL:{xl.group(1) if xl else '?'}",
+            "small": s.group(1) if s else 0,
+            "medium": m.group(1) if m else 0,
+            "large": l.group(1) if l else 0,
+            "xl": xl.group(1) if xl else 0
+        }
+
+    # WasherLink Data - extract useful stats
+    if 'ErdWasherLinkData' in value_str:
+        import re
+        count = re.search(r'washer_cycle_count=(\d+)', value_str)
+        extraction = re.search(r'water_extraction_level_index=(\d+)', value_str)
+        load_size = re.search(r'washer_load_size_index=(\d+)', value_str)
+        cycle_type = re.search(r'base_cycle_type=<BaseCycleType\.(\w+)', value_str)
+        return {
+            "display": f"Cycles: {count.group(1) if count else '?'}",
+            "cycle_count": count.group(1) if count else 0,
+            "extraction_level": extraction.group(1) if extraction else 0,
+            "load_size_index": load_size.group(1) if load_size else 0,
+            "base_cycle": cycle_type.group(1) if cycle_type else "Unknown"
+        }
+
+    # Smart Dispense Adjustability
+    if 'ErdSmartDispenseAdjustabilityOption' in value_str:
+        import re
+        dosage = re.search(r'dosage=<ErdSmartDispenseDosageType\.(\w+)', value_str)
+        return {"display": f"Dosage: {dosage.group(1).title() if dosage else 'Auto'}"}
+
+    # Allowables - parse what options are allowed (for controls)
+    if 'Allowables' in value_str:
+        import re
+        # Find all "name=True" or "name_allowed=True" patterns
+        allowed = re.findall(r'(\w+)(?:_allowed)?=True', value_str)
+        if allowed:
+            # Clean up names
+            clean = [a.replace('_', ' ').title() for a in allowed if 'raw' not in a.lower()]
+            return {"display": ", ".join(clean) if clean else "None", "options": clean}
+        return {"display": "None", "options": []}
+
+    # Raw bytes - show as hex or "inactive"
+    if value_str.startswith("b'"):
+        if value_str == "b'\\x00\\x00'" or value_str == "b'\\x00'":
+            return {"display": "Inactive"}
+        return {"display": "Active"}
+
+    return None
 
 
 def stringify_value(appliance, erd_code, value):
     """Convert ERD value to display string"""
     if value is None:
         return "N/A"
+
+    # Try our custom parser first
+    erd_name = erd_code.name if hasattr(erd_code, 'name') else str(erd_code)
+    parsed = parse_complex_value(value, erd_name)
+    if parsed:
+        return parsed.get("display", str(value))
+
     try:
         result = appliance.stringify_erd_value(value)
         if result:
@@ -86,6 +182,7 @@ def stringify_value(appliance, erd_code, value):
 
 def get_appliance_state(appliance):
     """Extract all relevant state from an appliance"""
+    import re
     mac = appliance.mac_addr
 
     # Determine appliance type (handle missing data gracefully)
@@ -104,7 +201,9 @@ def get_appliance_state(appliance):
         "type_display": app_type_str,
         "available": appliance.available,
         "last_update": datetime.now().isoformat(),
-        "properties": {}
+        "properties": {},
+        "controls": {},  # What options can be set
+        "stats": {}      # Lifetime statistics
     }
 
     # Get common properties
@@ -141,6 +240,72 @@ def get_appliance_state(appliance):
                 }
             except (KeyError, AttributeError, Exception):
                 pass
+
+    # Extract controls (what can be set) from allowables
+    props = state["properties"]
+
+    if is_dryer:
+        # Temperature control
+        if "LAUNDRY_DRYER_TEMPERATURE_OPTION_ALLOWABLES" in props:
+            raw = props["LAUNDRY_DRYER_TEMPERATURE_OPTION_ALLOWABLES"]["raw"]
+            options = []
+            if "low_allowed=True" in raw: options.append("Low")
+            if "medium_allowed=True" in raw: options.append("Medium")
+            if "high_allowed=True" in raw: options.append("High")
+            if "noheat_allowed=True" in raw: options.append("No Heat")
+            if "extralow_allowed=True" in raw: options.append("Extra Low")
+            current = props.get("LAUNDRY_DRYER_TEMPERATURENEW_OPTION", {}).get("display", "")
+            if options:
+                state["controls"]["temperature"] = {"current": current, "options": options}
+
+        # Dryness control
+        if "LAUNDRY_DRYER_DRYNESS_OPTION_ALLOWABLES" in props:
+            raw = props["LAUNDRY_DRYER_DRYNESS_OPTION_ALLOWABLES"]["raw"]
+            options = []
+            if "damp_allowed=True" in raw: options.append("Damp")
+            if "lessdry_allowed=True" in raw: options.append("Less Dry")
+            if "dry_allowed=True" in raw: options.append("Dry")
+            if "moredry_allowed=True" in raw: options.append("More Dry")
+            if "extradry_allowed=True" in raw: options.append("Extra Dry")
+            current = props.get("LAUNDRY_DRYER_DRYNESSNEW_LEVEL", {}).get("display", "")
+            if options:
+                state["controls"]["dryness"] = {"current": current, "options": options}
+
+        # EcoDry control
+        if "LAUNDRY_DRYER_ECODRY_OPTION_ALLOWABLES" in props:
+            raw = props["LAUNDRY_DRYER_ECODRY_OPTION_ALLOWABLES"]["raw"]
+            can_enable = "enable_allowed=True" in raw
+            can_disable = "disable_allowed=True" in raw
+            current = props.get("LAUNDRY_DRYER_ECODRY_OPTION_SELECTION", {}).get("display", "")
+            if can_enable or can_disable:
+                state["controls"]["ecodry"] = {"current": current, "can_toggle": can_enable and can_disable}
+
+        # Extended Tumble
+        if "LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_ALLOWABLES" in props:
+            raw = props["LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_ALLOWABLES"]["raw"]
+            can_enable = "enable_allowed=True" in raw
+            current = props.get("LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_SELECTION", {}).get("display", "")
+            if can_enable:
+                state["controls"]["extended_tumble"] = {"current": current, "available": True}
+
+        # Damp Alert
+        if "LAUNDRY_DRYER_DAMP_ALERT_OPTION_ALLOWABLES" in props:
+            raw = props["LAUNDRY_DRYER_DAMP_ALERT_OPTION_ALLOWABLES"]["raw"]
+            can_toggle = "enable_allowed=True" in raw and "disable_allowed=True" in raw
+            current = props.get("LAUNDRY_DRYER_DAMP_ALERT_OPTION_SELECTION", {}).get("display", "")
+            if can_toggle:
+                state["controls"]["damp_alert"] = {"current": current, "can_toggle": True}
+
+    # Extract stats
+    if "LAUNDRY_WASHER_LINK_DATA" in props:
+        raw = props["LAUNDRY_WASHER_LINK_DATA"]["raw"]
+        cycle_match = re.search(r'washer_cycle_count=(\d+)', raw)
+        if cycle_match:
+            state["stats"]["total_cycles"] = int(cycle_match.group(1))
+
+    # Remote control status
+    remote_status = props.get("LAUNDRY_REMOTE_STATUS", {}).get("display", "False")
+    state["remote_enabled"] = remote_status == "True"
 
     return state
 

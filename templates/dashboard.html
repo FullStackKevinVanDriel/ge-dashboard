@@ -82,19 +82,16 @@
 
             // Key metrics for washer
             let keyMetricsHtml = '';
+            const controls = data.controls || {};
+            const stats = data.stats || {};
+
             if (isWasher) {
                 const soilLevel = getProp(props, 'LAUNDRY_WASHER_SOIL_LEVEL');
                 const washTemp = getProp(props, 'LAUNDRY_WASHER_WASHTEMP_LEVEL');
                 const spinTime = getProp(props, 'LAUNDRY_WASHER_SPINTIME_LEVEL');
-                const tankStatus = getProp(props, 'LAUNDRY_WASHER_SMART_DISPENSE_TANK_STATUS');
                 const smartDispense = getProp(props, 'LAUNDRY_WASHER_SMART_DISPENSE');
-
-                // Parse loads left from smart dispense
-                let loadsLeft = '';
-                if (smartDispense && smartDispense.includes('loads_left=')) {
-                    const match = smartDispense.match(/loads_left=(\d+)/);
-                    if (match) loadsLeft = match[1] + ' loads left';
-                }
+                const dosage = getProp(props, 'LAUNDRY_WASHER_SMART_DISPENSE_ADJUSTABILITY_OPTION');
+                const totalCycles = stats.total_cycles || 0;
 
                 keyMetricsHtml = `
                     <div class="key-metrics">
@@ -111,9 +108,10 @@
                             <span class="metric-value">${spinTime}</span>
                         </div>
                         <div class="metric">
-                            <span class="metric-label">Detergent</span>
-                            <span class="metric-value">${tankStatus}${loadsLeft ? ' (' + loadsLeft + ')' : ''}</span>
+                            <span class="metric-label">Dispenser</span>
+                            <span class="metric-value">${smartDispense}</span>
                         </div>
+                        ${totalCycles ? `<div class="metric stat"><span class="metric-label">Cycles</span><span class="metric-value">${totalCycles.toLocaleString()}</span></div>` : ''}
                     </div>
                 `;
             } else if (isDryer) {
@@ -122,6 +120,9 @@
                 const ecoDry = getProp(props, 'LAUNDRY_DRYER_ECODRY_OPTION_SELECTION');
                 const sheets = getProp(props, 'LAUNDRY_DRYER_SHEET_INVENTORY', '0');
                 const ventBlocked = getProp(props, 'LAUNDRY_DRYER_BLOCKED_VENT_FAULT');
+                const sheetConfig = getProp(props, 'LAUNDRY_DRYER_SHEET_USAGE_CONFIGURATION');
+                const washerLink = getProp(props, 'LAUNDRY_DRYER_WASHERLINK_STATUS');
+                const totalCycles = stats.total_cycles || 0;
 
                 keyMetricsHtml = `
                     <div class="key-metrics">
@@ -135,15 +136,50 @@
                         </div>
                         <div class="metric">
                             <span class="metric-label">EcoDry</span>
-                            <span class="metric-value">${ecoDry.includes('Enabled') ? 'On' : 'Off'}</span>
+                            <span class="metric-value">${ecoDry === 'Enabled' ? 'On' : 'Off'}</span>
                         </div>
                         <div class="metric">
                             <span class="metric-label">Sheets</span>
                             <span class="metric-value">${sheets}</span>
                         </div>
                         ${ventBlocked === 'True' ? '<div class="metric alert"><span class="metric-label">VENT</span><span class="metric-value">BLOCKED</span></div>' : ''}
+                        ${totalCycles ? `<div class="metric stat"><span class="metric-label">Cycles</span><span class="metric-value">${totalCycles.toLocaleString()}</span></div>` : ''}
                     </div>
                 `;
+            }
+
+            // Controls section (settable options)
+            let controlsHtml = '';
+            if (Object.keys(controls).length > 0) {
+                let controlItems = '';
+                for (const [key, ctrl] of Object.entries(controls)) {
+                    const name = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    if (ctrl.options) {
+                        controlItems += `
+                            <div class="control-row">
+                                <span class="control-name">${name}</span>
+                                <span class="control-current">${ctrl.current}</span>
+                                <span class="control-options">${ctrl.options.join(' | ')}</span>
+                            </div>
+                        `;
+                    } else if (ctrl.can_toggle) {
+                        controlItems += `
+                            <div class="control-row">
+                                <span class="control-name">${name}</span>
+                                <span class="control-current">${ctrl.current}</span>
+                                <span class="control-options">Toggle</span>
+                            </div>
+                        `;
+                    }
+                }
+                if (controlItems) {
+                    controlsHtml = `
+                        <div class="controls-section">
+                            <h3>Available Controls</h3>
+                            <div class="controls-grid">${controlItems}</div>
+                        </div>
+                    `;
+                }
             }
 
             // Properties to exclude from the details section
@@ -158,8 +194,16 @@
                 'LAUNDRY_DRYER_BLOCKED_VENT_FAULT', 'LAUNDRY_WASHER_REMOTE_CYCLE_SELECTION_ALLOWABLES',
                 'WIFI_MODULE_SW_VERSION', 'WIFI_MODULE_SW_VERSION_AVAILABLE',
                 'APPLIANCE_SW_VERSION', 'APPLIANCE_SW_VERSION_AVAILABLE',
-                'ACM_UPDATING', 'APPLIANCE_UPDATING', 'BRAND', 'PERSONALITY'
+                'ACM_UPDATING', 'APPLIANCE_UPDATING', 'BRAND', 'PERSONALITY',
+                // Allowables (shown in controls section)
+                'LAUNDRY_DRYER_TEMPERATURE_OPTION_ALLOWABLES', 'LAUNDRY_DRYER_DRYNESS_OPTION_ALLOWABLES',
+                'LAUNDRY_DRYER_ECODRY_OPTION_ALLOWABLES', 'LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_ALLOWABLES',
+                'LAUNDRY_DRYER_DAMP_ALERT_OPTION_ALLOWABLES', 'LAUNDRY_DRYER_REDUCE_STATIC_OPTION_ALLOWABLES',
+                'LAUNDRY_WASHER_SMART_DISPENSE_ADJUSTABILITY_OPTION', 'LAUNDRY_WASHER_LINK_DATA',
+                'LAUNDRY_REMOTE_STATUS'
             ];
+
+            const remoteEnabled = data.remote_enabled;
 
             // Build additional details section
             let detailsHtml = '';
@@ -190,9 +234,12 @@
                             <h2>${title}</h2>
                             <span class="model">${model}</span>
                         </div>
-                        <div class="availability ${availableClass}">
-                            <span class="dot"></span>
-                            ${data.available ? 'Online' : 'Offline'}
+                        <div class="header-badges">
+                            ${remoteEnabled ? '<div class="remote-badge">Remote</div>' : ''}
+                            <div class="availability ${availableClass}">
+                                <span class="dot"></span>
+                                ${data.available ? 'Online' : 'Offline'}
+                            </div>
                         </div>
                     </div>
 
@@ -215,6 +262,8 @@
                     </div>
 
                     ${keyMetricsHtml}
+
+                    ${controlsHtml}
 
                     <div class="settings-section">
                         <h3>Additional Details</h3>
