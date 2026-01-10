@@ -197,6 +197,7 @@
 
                 // Map control keys to ERD names
                 const erdMap = {
+                    'power': 'LAUNDRY_REMOTE_POWER_CONTROL',  // THE ONLY WRITABLE ERD
                     'temperature': 'LAUNDRY_DRYER_TEMPERATURENEW_OPTION',
                     'dryness': 'LAUNDRY_DRYER_DRYNESSNEW_LEVEL',
                     'ecodry': 'LAUNDRY_DRYER_ECODRY_OPTION_SELECTION',
@@ -279,7 +280,7 @@
                 'LAUNDRY_DRYER_ECODRY_OPTION_ALLOWABLES', 'LAUNDRY_DRYER_EXTENDED_TUMBLE_OPTION_ALLOWABLES',
                 'LAUNDRY_DRYER_DAMP_ALERT_OPTION_ALLOWABLES', 'LAUNDRY_DRYER_REDUCE_STATIC_OPTION_ALLOWABLES',
                 'LAUNDRY_WASHER_SMART_DISPENSE_ADJUSTABILITY_OPTION', 'LAUNDRY_WASHER_LINK_DATA',
-                'LAUNDRY_REMOTE_STATUS'
+                'LAUNDRY_REMOTE_STATUS', 'LAUNDRY_REMOTE_POWER_CONTROL'
             ];
 
             const remoteEnabled = data.remote_enabled;

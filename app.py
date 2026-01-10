@@ -23,6 +23,7 @@ from gehomesdk import (
     EVENT_CONNECTED,
     EVENT_DISCONNECTED,
 )
+from gehomesdk.erd.values.common import ErdOnOff
 
 # Configuration
 SMARTHQ_EMAIL = "delynn.vandriel@gmail.com"
@@ -51,6 +52,7 @@ COMMON_ERDS = [
     ErdCode.LAUNDRY_TIME_REMAINING,
     ErdCode.LAUNDRY_DOOR,
     ErdCode.LAUNDRY_REMOTE_STATUS,
+    ErdCode.LAUNDRY_REMOTE_POWER_CONTROL,  # Writable - ON/OFF control
 ]
 
 WASHER_ERDS = [
@@ -300,6 +302,16 @@ def get_appliance_state(appliance):
             if can_toggle:
                 state["controls"]["damp_alert"] = {"current": current, "can_toggle": True}
 
+    # Power control (the only writable laundry ERD)
+    power_status = props.get("LAUNDRY_REMOTE_POWER_CONTROL", {}).get("display", "Na")
+    # NA means no command pending, not "unsupported"
+    state["controls"]["power"] = {
+        "current": power_status,
+        "options": ["Off", "On"],
+        "erd": "LAUNDRY_REMOTE_POWER_CONTROL",
+        "writable": True
+    }
+
     # Extract stats
     if "LAUNDRY_WASHER_LINK_DATA" in props:
         raw = props["LAUNDRY_WASHER_LINK_DATA"]["raw"]
@@ -442,7 +454,7 @@ async def run_ge_client():
     client.add_event_handler(EVENT_CONNECTED, on_connected)
     client.add_event_handler(EVENT_DISCONNECTED, on_disconnected)
 
-    print("[*] Connecting to GE SmartHQ...")
+    print("[*[*] Connecting to GE SmartHQ (v2)...")
 
     async with aiohttp.ClientSession() as session:
         # Run both the client and command processor concurrently
@@ -570,6 +582,13 @@ def map_value_for_erd(erd_code, value):
             return ErdEcoDryOptionSelection(option_status=ErdEcoDryOptionStatus.ENABLED)
         else:
             return ErdEcoDryOptionSelection(option_status=ErdEcoDryOptionStatus.DISABLED)
+
+    # Power control (ErdOnOff - the only writable laundry ERD!)
+    if erd_code == ErdCode.LAUNDRY_REMOTE_POWER_CONTROL:
+        if value.lower() in ["on", "1", "true"]:
+            return ErdOnOff.ON
+        else:
+            return ErdOnOff.OFF
 
     # Damp alert (boolean)
     if erd_code == ErdCode.LAUNDRY_DRYER_DAMP_ALERT_OPTION_SELECTION:
