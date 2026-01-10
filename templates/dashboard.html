@@ -27,20 +27,6 @@
         let appliances = {};
         let connected = false;
 
-        // Format time remaining as MM:SS or HH:MM:SS
-        function formatTime(seconds) {
-            if (!seconds || seconds === 'N/A' || seconds === '0') return '--:--';
-            const s = parseInt(seconds);
-            if (isNaN(s)) return seconds;
-            const h = Math.floor(s / 3600);
-            const m = Math.floor((s % 3600) / 60);
-            const sec = s % 60;
-            if (h > 0) {
-                return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-            }
-            return `${m}:${sec.toString().padStart(2, '0')}`;
-        }
-
         // Clean up property display names
         function formatPropertyName(name) {
             return name
@@ -58,9 +44,21 @@
             const s = state.toUpperCase();
             if (s.includes('RUN')) return 'running';
             if (s.includes('PAUSE')) return 'paused';
-            if (s.includes('END')) return 'complete';
+            if (s.includes('END') || s.includes('COMPLETE')) return 'complete';
             if (s.includes('DELAY')) return 'delayed';
             return 'idle';
+        }
+
+        // Format time for display (already comes formatted from backend)
+        function formatTime(timeStr) {
+            if (!timeStr || timeStr === 'N/A' || timeStr === 'None') return '--:--';
+            // Already formatted as H:MM:SS or similar
+            return timeStr;
+        }
+
+        // Get prop value safely
+        function getProp(props, key, defaultVal = 'N/A') {
+            return props[key]?.display || defaultVal;
         }
 
         // Render a single appliance card
@@ -71,32 +69,117 @@
             const title = isDryer ? 'Dryer' : 'Washer';
 
             const props = data.properties || {};
-            const machineState = props.LAUNDRY_MACHINE_STATE?.display || 'Unknown';
-            const subCycle = props.LAUNDRY_SUB_CYCLE?.display || '';
-            const cycle = props.LAUNDRY_CYCLE?.display || '';
-            const timeRemaining = props.LAUNDRY_TIME_REMAINING?.display || '0';
-            const doorStatus = props.LAUNDRY_DOOR?.display || '';
-            const model = props.MODEL_NUMBER?.display || 'Unknown Model';
+            const machineState = getProp(props, 'LAUNDRY_MACHINE_STATE', 'Unknown');
+            const subCycle = getProp(props, 'LAUNDRY_SUB_CYCLE', '');
+            const cycle = getProp(props, 'LAUNDRY_CYCLE', '');
+            const timeRemaining = getProp(props, 'LAUNDRY_TIME_REMAINING', '--:--');
+            const doorStatus = getProp(props, 'LAUNDRY_DOOR', 'Unknown');
+            const model = getProp(props, 'MODEL_NUMBER', 'Unknown Model');
+            const doorLock = getProp(props, 'LAUNDRY_WASHER_DOOR_LOCK', null);
 
             const stateClass = getMachineStateClass(machineState);
             const availableClass = data.available ? 'online' : 'offline';
 
-            // Group properties by category
-            const statusProps = ['LAUNDRY_MACHINE_STATE', 'LAUNDRY_SUB_CYCLE', 'LAUNDRY_CYCLE',
-                                 'LAUNDRY_TIME_REMAINING', 'LAUNDRY_DOOR', 'LAUNDRY_REMOTE_STATUS'];
-            const infoProps = ['MODEL_NUMBER', 'SERIAL_NUMBER', 'APPLIANCE_TYPE'];
+            // Key metrics for washer
+            let keyMetricsHtml = '';
+            if (isWasher) {
+                const soilLevel = getProp(props, 'LAUNDRY_WASHER_SOIL_LEVEL');
+                const washTemp = getProp(props, 'LAUNDRY_WASHER_WASHTEMP_LEVEL');
+                const spinTime = getProp(props, 'LAUNDRY_WASHER_SPINTIME_LEVEL');
+                const tankStatus = getProp(props, 'LAUNDRY_WASHER_SMART_DISPENSE_TANK_STATUS');
+                const smartDispense = getProp(props, 'LAUNDRY_WASHER_SMART_DISPENSE');
 
-            // Build settings section
-            let settingsHtml = '';
+                // Parse loads left from smart dispense
+                let loadsLeft = '';
+                if (smartDispense && smartDispense.includes('loads_left=')) {
+                    const match = smartDispense.match(/loads_left=(\d+)/);
+                    if (match) loadsLeft = match[1] + ' loads left';
+                }
+
+                keyMetricsHtml = `
+                    <div class="key-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Soil</span>
+                            <span class="metric-value">${soilLevel}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Temp</span>
+                            <span class="metric-value">${washTemp}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Spin</span>
+                            <span class="metric-value">${spinTime}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Detergent</span>
+                            <span class="metric-value">${tankStatus}${loadsLeft ? ' (' + loadsLeft + ')' : ''}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (isDryer) {
+                const temp = getProp(props, 'LAUNDRY_DRYER_TEMPERATURENEW_OPTION');
+                const dryness = getProp(props, 'LAUNDRY_DRYER_DRYNESSNEW_LEVEL');
+                const ecoDry = getProp(props, 'LAUNDRY_DRYER_ECODRY_OPTION_SELECTION');
+                const sheets = getProp(props, 'LAUNDRY_DRYER_SHEET_INVENTORY', '0');
+                const ventBlocked = getProp(props, 'LAUNDRY_DRYER_BLOCKED_VENT_FAULT');
+
+                keyMetricsHtml = `
+                    <div class="key-metrics">
+                        <div class="metric">
+                            <span class="metric-label">Temp</span>
+                            <span class="metric-value">${temp}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Dryness</span>
+                            <span class="metric-value">${dryness}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">EcoDry</span>
+                            <span class="metric-value">${ecoDry.includes('Enabled') ? 'On' : 'Off'}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Sheets</span>
+                            <span class="metric-value">${sheets}</span>
+                        </div>
+                        ${ventBlocked === 'True' ? '<div class="metric alert"><span class="metric-label">VENT</span><span class="metric-value">BLOCKED</span></div>' : ''}
+                    </div>
+                `;
+            }
+
+            // Properties to exclude from the details section
+            const excludeProps = [
+                'LAUNDRY_MACHINE_STATE', 'LAUNDRY_SUB_CYCLE', 'LAUNDRY_CYCLE',
+                'LAUNDRY_TIME_REMAINING', 'LAUNDRY_DOOR', 'MODEL_NUMBER',
+                'SERIAL_NUMBER', 'APPLIANCE_TYPE', 'LAUNDRY_WASHER_SOIL_LEVEL',
+                'LAUNDRY_WASHER_WASHTEMP_LEVEL', 'LAUNDRY_WASHER_SPINTIME_LEVEL',
+                'LAUNDRY_WASHER_SMART_DISPENSE_TANK_STATUS', 'LAUNDRY_WASHER_SMART_DISPENSE',
+                'LAUNDRY_DRYER_TEMPERATURENEW_OPTION', 'LAUNDRY_DRYER_DRYNESSNEW_LEVEL',
+                'LAUNDRY_DRYER_ECODRY_OPTION_SELECTION', 'LAUNDRY_DRYER_SHEET_INVENTORY',
+                'LAUNDRY_DRYER_BLOCKED_VENT_FAULT', 'LAUNDRY_WASHER_REMOTE_CYCLE_SELECTION_ALLOWABLES',
+                'WIFI_MODULE_SW_VERSION', 'WIFI_MODULE_SW_VERSION_AVAILABLE',
+                'APPLIANCE_SW_VERSION', 'APPLIANCE_SW_VERSION_AVAILABLE',
+                'ACM_UPDATING', 'APPLIANCE_UPDATING', 'BRAND', 'PERSONALITY'
+            ];
+
+            // Build additional details section
+            let detailsHtml = '';
             for (const [key, val] of Object.entries(props)) {
-                if (!statusProps.includes(key) && !infoProps.includes(key) && !key.startsWith('0x')) {
-                    settingsHtml += `
+                if (!excludeProps.includes(key) && !key.startsWith('0x') && val.display !== 'N/A') {
+                    // Skip long allowables strings
+                    if (val.display.length > 100) continue;
+                    detailsHtml += `
                         <div class="prop-row" data-prop="${key}">
                             <span class="prop-name">${formatPropertyName(key)}</span>
                             <span class="prop-value">${val.display}</span>
                         </div>
                     `;
                 }
+            }
+
+            // Door display with lock status
+            let doorDisplay = doorStatus;
+            if (isWasher && doorLock) {
+                doorDisplay += doorLock === 'True' ? ' (Locked)' : '';
             }
 
             return `
@@ -117,8 +200,8 @@
                         <div class="machine-state ${stateClass}">
                             ${machineState}
                         </div>
-                        ${subCycle ? `<div class="sub-cycle">${subCycle}</div>` : ''}
-                        ${cycle && cycle !== 'N/A' ? `<div class="cycle-name">${cycle}</div>` : ''}
+                        ${subCycle && subCycle !== '---' ? `<div class="sub-cycle">${subCycle}</div>` : ''}
+                        ${cycle && cycle !== 'N/A' ? `<div class="cycle-name">Cycle: ${cycle}</div>` : ''}
                     </div>
 
                     <div class="time-section">
@@ -126,13 +209,17 @@
                             <span class="time-value">${formatTime(timeRemaining)}</span>
                             <span class="time-label">remaining</span>
                         </div>
-                        ${doorStatus ? `<div class="door-status">Door: ${doorStatus}</div>` : ''}
+                        <div class="door-status ${doorStatus.toLowerCase().includes('open') ? 'door-open' : 'door-closed'}">
+                            Door: ${doorDisplay}
+                        </div>
                     </div>
 
+                    ${keyMetricsHtml}
+
                     <div class="settings-section">
-                        <h3>Settings & Status</h3>
+                        <h3>Additional Details</h3>
                         <div class="props-grid">
-                            ${settingsHtml || '<div class="no-data">No additional data</div>'}
+                            ${detailsHtml || '<div class="no-data">No additional data</div>'}
                         </div>
                     </div>
 
@@ -179,6 +266,10 @@
         function flashUpdate(mac, changedProps) {
             const card = document.querySelector(`[data-mac="${mac}"]`);
             if (!card) return;
+
+            // Flash the whole card briefly
+            card.classList.add('updating');
+            setTimeout(() => card.classList.remove('updating'), 500);
 
             for (const prop of Object.keys(changedProps)) {
                 const el = card.querySelector(`[data-prop="${prop}"] .prop-value`);

@@ -404,6 +404,72 @@ main {
     background: var(--text-muted);
 }
 
+/* Key Metrics */
+.key-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.metric {
+    text-align: center;
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.metric-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.metric-value {
+    display: block;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.metric.alert {
+    background: rgba(231, 76, 60, 0.3);
+    border: 1px solid var(--accent-red);
+}
+
+.metric.alert .metric-value {
+    color: var(--accent-red);
+}
+
+/* Door Status */
+.door-status {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.door-status.door-closed {
+    color: var(--accent-green);
+    background: rgba(46, 204, 113, 0.15);
+}
+
+.door-status.door-open {
+    color: var(--accent-orange);
+    background: rgba(243, 156, 18, 0.15);
+}
+
+/* Card updating animation */
+.appliance-card.updating {
+    box-shadow: 0 0 20px rgba(77, 168, 218, 0.4);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     header {
