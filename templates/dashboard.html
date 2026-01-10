@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GE Appliances Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>GE Appliances Dashboard</h1>
+        <div id="connection-status" class="status disconnected">
+            <span class="dot"></span>
+            <span class="text">Connecting...</span>
+        </div>
+    </header>
+
+    <main id="dashboard">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Connecting to GE SmartHQ...</p>
+        </div>
+    </main>
+
+    <script>
+        // State
+        let appliances = {};
+        let connected = false;
+
+        // Format time remaining as MM:SS or HH:MM:SS
+        function formatTime(seconds) {
+            if (!seconds || seconds === 'N/A' || seconds === '0') return '--:--';
+            const s = parseInt(seconds);
+            if (isNaN(s)) return seconds;
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const sec = s % 60;
+            if (h > 0) {
+                return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+            }
+            return `${m}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        // Clean up property display names
+        function formatPropertyName(name) {
+            return name
+                .replace(/^LAUNDRY_/, '')
+                .replace(/^WASHER_/, '')
+                .replace(/^DRYER_/, '')
+                .replace(/_/g, ' ')
+                .toLowerCase()
+                .replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Get status class based on machine state
+        function getMachineStateClass(state) {
+            if (!state) return 'idle';
+            const s = state.toUpperCase();
+            if (s.includes('RUN')) return 'running';
+            if (s.includes('PAUSE')) return 'paused';
+            if (s.includes('END')) return 'complete';
+            if (s.includes('DELAY')) return 'delayed';
+            return 'idle';
+        }
+
+        // Render a single appliance card
+        function renderAppliance(mac, data) {
+            const isWasher = data.type === 'washer';
+            const isDryer = data.type === 'dryer';
+            const icon = isDryer ? '🔥' : '💧';
+            const title = isDryer ? 'Dryer' : 'Washer';
+
+            const props = data.properties || {};
+            const machineState = props.LAUNDRY_MACHINE_STATE?.display || 'Unknown';
+            const subCycle = props.LAUNDRY_SUB_CYCLE?.display || '';
+            const cycle = props.LAUNDRY_CYCLE?.display || '';
+            const timeRemaining = props.LAUNDRY_TIME_REMAINING?.display || '0';
+            const doorStatus = props.LAUNDRY_DOOR?.display || '';
+            const model = props.MODEL_NUMBER?.display || 'Unknown Model';
+
+            const stateClass = getMachineStateClass(machineState);
+            const availableClass = data.available ? 'online' : 'offline';
+
+            // Group properties by category
+            const statusProps = ['LAUNDRY_MACHINE_STATE', 'LAUNDRY_SUB_CYCLE', 'LAUNDRY_CYCLE',
+                                 'LAUNDRY_TIME_REMAINING', 'LAUNDRY_DOOR', 'LAUNDRY_REMOTE_STATUS'];
+            const infoProps = ['MODEL_NUMBER', 'SERIAL_NUMBER', 'APPLIANCE_TYPE'];
+
+            // Build settings section
+            let settingsHtml = '';
+            for (const [key, val] of Object.entries(props)) {
+                if (!statusProps.includes(key) && !infoProps.includes(key) && !key.startsWith('0x')) {
+                    settingsHtml += `
+                        <div class="prop-row" data-prop="${key}">
+                            <span class="prop-name">${formatPropertyName(key)}</span>
+                            <span class="prop-value">${val.display}</span>
+                        </div>
+                    `;
+                }
+            }
+
+            return `
+                <div class="appliance-card ${data.type}" data-mac="${mac}">
+                    <div class="card-header">
+                        <div class="appliance-icon">${icon}</div>
+                        <div class="appliance-title">
+                            <h2>${title}</h2>
+                            <span class="model">${model}</span>
+                        </div>
+                        <div class="availability ${availableClass}">
+                            <span class="dot"></span>
+                            ${data.available ? 'Online' : 'Offline'}
+                        </div>
+                    </div>
+
+                    <div class="status-section">
+                        <div class="machine-state ${stateClass}">
+                            ${machineState}
+                        </div>
+                        ${subCycle ? `<div class="sub-cycle">${subCycle}</div>` : ''}
+                        ${cycle && cycle !== 'N/A' ? `<div class="cycle-name">${cycle}</div>` : ''}
+                    </div>
+
+                    <div class="time-section">
+                        <div class="time-remaining">
+                            <span class="time-value">${formatTime(timeRemaining)}</span>
+                            <span class="time-label">remaining</span>
+                        </div>
+                        ${doorStatus ? `<div class="door-status">Door: ${doorStatus}</div>` : ''}
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Settings & Status</h3>
+                        <div class="props-grid">
+                            ${settingsHtml || '<div class="no-data">No additional data</div>'}
+                        </div>
+                    </div>
+
+                    <div class="card-footer">
+                        <span class="last-update">Updated: ${new Date(data.last_update).toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render the full dashboard
+        function renderDashboard() {
+            const dashboard = document.getElementById('dashboard');
+
+            if (Object.keys(appliances).length === 0) {
+                dashboard.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Waiting for appliance data...</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort: washer first, then dryer
+            const sorted = Object.entries(appliances).sort((a, b) => {
+                if (a[1].type === 'washer') return -1;
+                if (b[1].type === 'washer') return 1;
+                return 0;
+            });
+
+            dashboard.innerHTML = sorted.map(([mac, data]) => renderAppliance(mac, data)).join('');
+        }
+
+        // Update connection status UI
+        function updateConnectionStatus(isConnected) {
+            const el = document.getElementById('connection-status');
+            el.className = `status ${isConnected ? 'connected' : 'disconnected'}`;
+            el.querySelector('.text').textContent = isConnected ? 'Connected' : 'Disconnected';
+            connected = isConnected;
+        }
+
+        // Flash animation for updated values
+        function flashUpdate(mac, changedProps) {
+            const card = document.querySelector(`[data-mac="${mac}"]`);
+            if (!card) return;
+
+            for (const prop of Object.keys(changedProps)) {
+                const el = card.querySelector(`[data-prop="${prop}"] .prop-value`);
+                if (el) {
+                    el.classList.add('flash');
+                    setTimeout(() => el.classList.remove('flash'), 1000);
+                }
+            }
+        }
+
+        // Handle SSE messages
+        function handleMessage(data) {
+            switch (data.event) {
+                case 'init':
+                    updateConnectionStatus(data.connection?.connected);
+                    appliances = data.appliances || {};
+                    renderDashboard();
+                    break;
+
+                case 'connected':
+                    updateConnectionStatus(true);
+                    break;
+
+                case 'disconnected':
+                    updateConnectionStatus(false);
+                    break;
+
+                case 'appliance_added':
+                case 'state_change':
+                    if (data.mac && data.data) {
+                        appliances[data.mac] = data.data;
+                        renderDashboard();
+                        if (data.changes) {
+                            flashUpdate(data.mac, data.changes);
+                        }
+                    }
+                    break;
+
+                case 'available':
+                    if (data.mac && appliances[data.mac]) {
+                        appliances[data.mac].available = true;
+                        renderDashboard();
+                    }
+                    break;
+
+                case 'unavailable':
+                    if (data.mac && appliances[data.mac]) {
+                        appliances[data.mac].available = false;
+                        renderDashboard();
+                    }
+                    break;
+
+                case 'error':
+                    console.error('Server error:', data.message);
+                    break;
+
+                case 'keepalive':
+                    // Just a ping, ignore
+                    break;
+
+                default:
+                    console.log('Unknown event:', data);
+            }
+        }
+
+        // Connect to SSE stream
+        function connectSSE() {
+            const evtSource = new EventSource('/stream');
+
+            evtSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleMessage(data);
+                } catch (e) {
+                    console.error('Failed to parse SSE message:', e);
+                }
+            };
+
+            evtSource.onerror = (err) => {
+                console.error('SSE error:', err);
+                updateConnectionStatus(false);
+                evtSource.close();
+                // Reconnect after 3 seconds
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            connectSSE();
+        });
+    </script>
+</body>
+</html>

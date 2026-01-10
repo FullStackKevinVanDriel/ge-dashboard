@@ -1,0 +1,426 @@
+/* GE Appliances Dashboard - Dark Theme */
+
+:root {
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-card: #1f2940;
+    --text-primary: #eaeaea;
+    --text-secondary: #a0a0a0;
+    --text-muted: #6c6c6c;
+    --accent-blue: #4da8da;
+    --accent-green: #2ecc71;
+    --accent-orange: #f39c12;
+    --accent-red: #e74c3c;
+    --accent-purple: #9b59b6;
+    --border-color: #2a3a5a;
+    --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+/* Header */
+header {
+    background: var(--bg-secondary);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
+
+header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Connection Status */
+.status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.status.connected {
+    background: rgba(46, 204, 113, 0.2);
+    color: var(--accent-green);
+}
+
+.status.connected .dot {
+    background: var(--accent-green);
+}
+
+.status.disconnected {
+    background: rgba(231, 76, 60, 0.2);
+    color: var(--accent-red);
+}
+
+.status.disconnected .dot {
+    background: var(--accent-red);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Main Dashboard */
+main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+#dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 2rem;
+}
+
+/* Loading State */
+.loading {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Appliance Card */
+.appliance-card {
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.appliance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}
+
+.appliance-card.washer {
+    border-top: 4px solid var(--accent-blue);
+}
+
+.appliance-card.dryer {
+    border-top: 4px solid var(--accent-orange);
+}
+
+/* Card Header */
+.card-header {
+    display: flex;
+    align-items: center;
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.appliance-icon {
+    font-size: 2.5rem;
+    margin-right: 1rem;
+}
+
+.appliance-title {
+    flex: 1;
+}
+
+.appliance-title h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.appliance-title .model {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+
+.availability {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+}
+
+.availability.online {
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--accent-green);
+}
+
+.availability.offline {
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--accent-red);
+}
+
+.availability .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.availability.online .dot {
+    background: var(--accent-green);
+}
+
+.availability.offline .dot {
+    background: var(--accent-red);
+}
+
+/* Status Section */
+.status-section {
+    padding: 1.5rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.machine-state {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.5rem 1.5rem;
+    border-radius: 8px;
+    display: inline-block;
+    margin-bottom: 0.5rem;
+}
+
+.machine-state.idle {
+    background: rgba(160, 160, 160, 0.15);
+    color: var(--text-secondary);
+}
+
+.machine-state.running {
+    background: rgba(46, 204, 113, 0.2);
+    color: var(--accent-green);
+    animation: glow-green 2s ease-in-out infinite;
+}
+
+.machine-state.paused {
+    background: rgba(243, 156, 18, 0.2);
+    color: var(--accent-orange);
+}
+
+.machine-state.complete {
+    background: rgba(77, 168, 218, 0.2);
+    color: var(--accent-blue);
+}
+
+.machine-state.delayed {
+    background: rgba(155, 89, 182, 0.2);
+    color: var(--accent-purple);
+}
+
+@keyframes glow-green {
+    0%, 100% { box-shadow: 0 0 5px rgba(46, 204, 113, 0.3); }
+    50% { box-shadow: 0 0 20px rgba(46, 204, 113, 0.5); }
+}
+
+.sub-cycle {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.cycle-name {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* Time Section */
+.time-section {
+    padding: 1.5rem;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.time-remaining {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.time-value {
+    font-size: 3rem;
+    font-weight: 700;
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    color: var(--text-primary);
+    letter-spacing: 0.1em;
+}
+
+.time-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.door-status {
+    margin-top: 0.75rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* Settings Section */
+.settings-section {
+    padding: 1.5rem;
+}
+
+.settings-section h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.props-grid {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.prop-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.prop-name {
+    color: var(--text-secondary);
+}
+
+.prop-value {
+    color: var(--text-primary);
+    font-weight: 500;
+    text-align: right;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background 0.3s;
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+}
+
+.prop-value.flash {
+    background: rgba(77, 168, 218, 0.3);
+    animation: flash-fade 1s ease-out;
+}
+
+@keyframes flash-fade {
+    0% { background: rgba(77, 168, 218, 0.5); }
+    100% { background: transparent; }
+}
+
+.no-data {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1rem;
+}
+
+/* Card Footer */
+.card-footer {
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+/* Scrollbar Styling */
+.props-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.props-grid::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 3px;
+}
+
+.props-grid::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.props-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+    }
+
+    main {
+        padding: 1rem;
+    }
+
+    #dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .time-value {
+        font-size: 2.5rem;
+    }
+}
