@@ -9,7 +9,7 @@ import queue
 import threading
 import time
 from datetime import datetime
-from flask import Flask, render_template, Response, jsonify
+from flask import Flask, render_template, Response, jsonify, request
 import aiohttp
 
 from gehomesdk import (
@@ -33,8 +33,12 @@ app = Flask(__name__)
 
 # Global state
 appliance_data = {}
+appliance_objects = {}  # Store actual appliance objects for sending commands
+ge_client = None  # Store client reference
+ge_loop = None  # Store async event loop for running commands
 connection_status = {"connected": False, "last_update": None}
 update_queue = queue.Queue()
+command_queue = queue.Queue()  # Queue for commands to send to appliances
 
 # ERD codes we want to track for each appliance type
 COMMON_ERDS = [
@@ -314,6 +318,7 @@ async def on_appliance_added(appliance):
     """Handle new appliance discovery"""
     mac = appliance.mac_addr
     print(f"[+] Appliance added: {mac}")
+    appliance_objects[mac] = appliance  # Store for sending commands
     appliance_data[mac] = get_appliance_state(appliance)
     update_queue.put({"event": "appliance_added", "mac": mac, "data": appliance_data[mac]})
 
@@ -377,13 +382,57 @@ async def on_disconnected(_=None):
     update_queue.put({"event": "disconnected"})
 
 
+async def process_commands():
+    """Process commands from the command queue"""
+    global ge_loop
+    ge_loop = asyncio.get_event_loop()
+
+    while True:
+        try:
+            # Check for commands every 100ms
+            await asyncio.sleep(0.1)
+
+            try:
+                cmd = command_queue.get_nowait()
+            except queue.Empty:
+                continue
+
+            mac = cmd.get("mac")
+            erd_code = cmd.get("erd_code")
+            value = cmd.get("value")
+            result_queue = cmd.get("result_queue")
+
+            print(f"[>] Sending command to {mac}: {erd_code} = {value}")
+
+            try:
+                appliance = appliance_objects.get(mac)
+                if not appliance:
+                    result_queue.put({"success": False, "error": "Appliance not found"})
+                    continue
+
+                # Send the command
+                await appliance.async_set_erd_value(erd_code, value)
+                result_queue.put({"success": True})
+                print(f"[+] Command sent successfully")
+
+            except Exception as e:
+                print(f"[!] Command failed: {e}")
+                result_queue.put({"success": False, "error": str(e)})
+
+        except Exception as e:
+            print(f"[!] Command processor error: {e}")
+
+
 async def run_ge_client():
     """Main async loop for GE SDK client"""
+    global ge_client
+
     client = GeWebsocketClient(
         username=SMARTHQ_EMAIL,
         password=SMARTHQ_PASSWORD,
         region=SMARTHQ_REGION
     )
+    ge_client = client
 
     # Register event handlers
     client.add_event_handler(EVENT_ADD_APPLIANCE, on_appliance_added)
@@ -396,7 +445,11 @@ async def run_ge_client():
     print("[*] Connecting to GE SmartHQ...")
 
     async with aiohttp.ClientSession() as session:
-        await client.async_get_credentials_and_run(session)
+        # Run both the client and command processor concurrently
+        await asyncio.gather(
+            client.async_get_credentials_and_run(session),
+            process_commands()
+        )
 
 
 def start_ge_client_thread():
@@ -431,6 +484,99 @@ def api_appliances():
         "connection": connection_status,
         "appliances": appliance_data
     })
+
+
+@app.route("/api/appliances/<mac>/set", methods=["POST"])
+def api_set_value(mac):
+    """Set a value on an appliance"""
+    if mac not in appliance_objects:
+        return jsonify({"success": False, "error": "Appliance not found"}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "error": "No data provided"}), 400
+
+    erd_name = data.get("erd")
+    value = data.get("value")
+
+    if not erd_name or value is None:
+        return jsonify({"success": False, "error": "Missing erd or value"}), 400
+
+    # Map ERD name to code
+    try:
+        erd_code = ErdCode[erd_name]
+    except KeyError:
+        return jsonify({"success": False, "error": f"Unknown ERD: {erd_name}"}), 400
+
+    # Map value to appropriate type based on ERD
+    try:
+        mapped_value = map_value_for_erd(erd_code, value)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Invalid value: {e}"}), 400
+
+    # Queue the command
+    result_queue = queue.Queue()
+    command_queue.put({
+        "mac": mac,
+        "erd_code": erd_code,
+        "value": mapped_value,
+        "result_queue": result_queue
+    })
+
+    # Wait for result (with timeout)
+    try:
+        result = result_queue.get(timeout=10)
+        if result.get("success"):
+            return jsonify({"success": True})
+        else:
+            return jsonify({"success": False, "error": result.get("error")}), 500
+    except queue.Empty:
+        return jsonify({"success": False, "error": "Command timeout"}), 504
+
+
+def map_value_for_erd(erd_code, value):
+    """Map string value to appropriate ERD value type"""
+    from gehomesdk.erd import ErdCodeClass
+    from gehomesdk.erd.values.laundry import (
+        ErdEcoDryOptionSelection, ErdEcoDryOptionStatus,
+        TemperatureOption, DrynessLevel
+    )
+
+    # Temperature mapping
+    if erd_code == ErdCode.LAUNDRY_DRYER_TEMPERATURENEW_OPTION:
+        temp_map = {
+            "high": TemperatureOption.HIGH,
+            "medium": TemperatureOption.MEDIUM,
+            "low": TemperatureOption.LOW,
+            "no_heat": TemperatureOption.NO_HEAT,
+            "extra_low": TemperatureOption.EXTRA_LOW,
+        }
+        return temp_map.get(value.lower(), TemperatureOption.MEDIUM)
+
+    # Dryness mapping
+    if erd_code == ErdCode.LAUNDRY_DRYER_DRYNESSNEW_LEVEL:
+        dryness_map = {
+            "damp": DrynessLevel.DAMP,
+            "less_dry": DrynessLevel.LESS_DRY,
+            "dry": DrynessLevel.DRY,
+            "more_dry": DrynessLevel.MORE_DRY,
+            "extra_dry": DrynessLevel.EXTRA_DRY,
+        }
+        return dryness_map.get(value.lower().replace(" ", "_"), DrynessLevel.DRY)
+
+    # EcoDry mapping
+    if erd_code == ErdCode.LAUNDRY_DRYER_ECODRY_OPTION_SELECTION:
+        if value.lower() in ["true", "enabled", "on", "1"]:
+            return ErdEcoDryOptionSelection(option_status=ErdEcoDryOptionStatus.ENABLED)
+        else:
+            return ErdEcoDryOptionSelection(option_status=ErdEcoDryOptionStatus.DISABLED)
+
+    # Damp alert (boolean)
+    if erd_code == ErdCode.LAUNDRY_DRYER_DAMP_ALERT_OPTION_SELECTION:
+        return value.lower() in ["true", "enabled", "on", "1"]
+
+    # Default: return value as-is
+    return value
 
 
 @app.route("/stream")

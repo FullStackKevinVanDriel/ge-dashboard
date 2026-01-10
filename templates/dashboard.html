@@ -61,6 +61,47 @@
             return props[key]?.display || defaultVal;
         }
 
+        // Send control command to appliance
+        async function setControl(mac, erd, value) {
+            // Find and disable the button that was clicked
+            const buttons = document.querySelectorAll(`[data-mac="${mac}"] .control-btn, [data-mac="${mac}"] .toggle-switch input`);
+
+            try {
+                // Show loading state
+                document.querySelector(`[data-mac="${mac}"]`)?.classList.add('sending');
+
+                const response = await fetch(`/api/appliances/${mac}/set`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ erd, value })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    console.log(`[+] Set ${erd} = ${value} on ${mac}`);
+                    // Flash success
+                    document.querySelector(`[data-mac="${mac}"]`)?.classList.add('command-success');
+                    setTimeout(() => {
+                        document.querySelector(`[data-mac="${mac}"]`)?.classList.remove('command-success');
+                    }, 1000);
+                } else {
+                    console.error(`[-] Failed: ${result.error}`);
+                    alert(`Failed to set value: ${result.error}`);
+                    // Flash error
+                    document.querySelector(`[data-mac="${mac}"]`)?.classList.add('command-error');
+                    setTimeout(() => {
+                        document.querySelector(`[data-mac="${mac}"]`)?.classList.remove('command-error');
+                    }, 1000);
+                }
+            } catch (err) {
+                console.error('Command error:', err);
+                alert(`Command failed: ${err.message}`);
+            } finally {
+                document.querySelector(`[data-mac="${mac}"]`)?.classList.remove('sending');
+            }
+        }
+
         // Render a single appliance card
         function renderAppliance(mac, data) {
             const isWasher = data.type === 'washer';
@@ -148,26 +189,51 @@
                 `;
             }
 
-            // Controls section (settable options)
+            // Controls section (settable options) - now with interactive buttons
             let controlsHtml = '';
-            if (Object.keys(controls).length > 0) {
+            if (Object.keys(controls).length > 0 && data.remote_enabled !== false) {
                 let controlItems = '';
+
+                // Map control keys to ERD names
+                const erdMap = {
+                    'temperature': 'LAUNDRY_DRYER_TEMPERATURENEW_OPTION',
+                    'dryness': 'LAUNDRY_DRYER_DRYNESSNEW_LEVEL',
+                    'ecodry': 'LAUNDRY_DRYER_ECODRY_OPTION_SELECTION',
+                    'damp_alert': 'LAUNDRY_DRYER_DAMP_ALERT_OPTION_SELECTION'
+                };
+
                 for (const [key, ctrl] of Object.entries(controls)) {
                     const name = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    const erd = erdMap[key] || key.toUpperCase();
+
                     if (ctrl.options) {
+                        // Dropdown/button group for options
+                        const buttons = ctrl.options.map(opt => {
+                            const isActive = ctrl.current.toLowerCase() === opt.toLowerCase();
+                            const value = opt.toLowerCase().replace(' ', '_');
+                            return `<button class="control-btn ${isActive ? 'active' : ''}"
+                                onclick="setControl('${mac}', '${erd}', '${value}')">${opt}</button>`;
+                        }).join('');
+
                         controlItems += `
                             <div class="control-row">
                                 <span class="control-name">${name}</span>
-                                <span class="control-current">${ctrl.current}</span>
-                                <span class="control-options">${ctrl.options.join(' | ')}</span>
+                                <div class="control-buttons">${buttons}</div>
                             </div>
                         `;
                     } else if (ctrl.can_toggle) {
+                        // Toggle switch
+                        const isOn = ctrl.current.toLowerCase() === 'true' ||
+                                     ctrl.current.toLowerCase() === 'enabled' ||
+                                     ctrl.current === 'Enabled';
                         controlItems += `
                             <div class="control-row">
                                 <span class="control-name">${name}</span>
-                                <span class="control-current">${ctrl.current}</span>
-                                <span class="control-options">Toggle</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" ${isOn ? 'checked' : ''}
+                                        onchange="setControl('${mac}', '${erd}', this.checked ? 'enabled' : 'disabled')">
+                                    <span class="toggle-slider"></span>
+                                </label>
                             </div>
                         `;
                     }
@@ -175,11 +241,19 @@
                 if (controlItems) {
                     controlsHtml = `
                         <div class="controls-section">
-                            <h3>Available Controls</h3>
+                            <h3>Controls</h3>
                             <div class="controls-grid">${controlItems}</div>
                         </div>
                     `;
                 }
+            } else if (Object.keys(controls).length > 0) {
+                // Remote not enabled - show read-only
+                controlsHtml = `
+                    <div class="controls-section controls-disabled">
+                        <h3>Controls (Remote Disabled)</h3>
+                        <p class="controls-note">Enable Remote on the appliance to control from here</p>
+                    </div>
+                `;
             }
 
             // Properties to exclude from the details section
