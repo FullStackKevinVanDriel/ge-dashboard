@@ -435,6 +435,20 @@ async def process_commands():
             print(f"[!] Command processor error: {e}")
 
 
+async def periodic_update_poll():
+    """Poll appliances for updates every 5 seconds"""
+    await asyncio.sleep(10)  # Wait for initial connection
+    while True:
+        try:
+            for mac, appliance in appliance_objects.items():
+                if appliance.available:
+                    await appliance.async_request_update()
+            await asyncio.sleep(5)  # Poll every 5 seconds
+        except Exception as e:
+            print(f"[!] Polling error: {e}")
+            await asyncio.sleep(5)
+
+
 async def run_ge_client():
     """Main async loop for GE SDK client"""
     global ge_client
@@ -460,7 +474,8 @@ async def run_ge_client():
         # Run both the client and command processor concurrently
         await asyncio.gather(
             client.async_get_credentials_and_run(session),
-            process_commands()
+            process_commands(),
+            periodic_update_poll()
         )
 
 
