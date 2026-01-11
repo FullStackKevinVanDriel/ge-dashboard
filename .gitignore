@@ -1,0 +1,4 @@
+__pycache__/
+*.json
+!package.json
+sse_test.txt
